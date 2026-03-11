@@ -1,0 +1,6 @@
+test/.venv
+test/__pycache__
+test/sim_build
+test/results.xml
+test/uv.lock
+test/*.fst
