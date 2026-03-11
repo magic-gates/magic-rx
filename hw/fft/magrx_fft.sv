@@ -22,11 +22,15 @@ module magrx_fft
     always @(posedge clk) begin
         ce <= ~i_idx[10];
         t_idx <= i_idx[9:0];
-        t_re <= {i_re, 4'd0};
-        t_im <= {i_im, 4'd0};
+        t_re <= i_re;
+        t_im <= i_im;
     end
 
-    magrx_fft_1024 #(16, 16) u_fft_1024
+    magrx_fft_1024 #
+    ( .IW(12)
+    , .OW(16)
+    , .TW(16)
+    ) u_fft_1024
     ( .clk(clk)
 
     , .i_ce(ce)
