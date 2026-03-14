@@ -4,3 +4,4 @@ test/sim_build
 test/results.xml
 test/uv.lock
 test/*.fst
+test/*.fst.hier

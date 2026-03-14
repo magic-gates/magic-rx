@@ -15,7 +15,7 @@ VERILOG_SOURCES += $(PWD)/../hw/eq/*.sv
 VERILOG_SOURCES += $(PWD)/../hw/misc/*.sv
 # use VHDL_SOURCES for VHDL files
 
-COMPILE_ARGS += -Wno-unused -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC -Wno-PINMISSING
+COMPILE_ARGS += -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC
 COMPILE_ARGS += --trace-fst
 
 # COCOTB_TOPLEVEL is the name of the toplevel module in your Verilog or VHDL file

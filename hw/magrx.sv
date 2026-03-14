@@ -1,7 +1,3 @@
-// Copyright (c) 2026, Magic Gates
-// License: GPLv3
-// Author: Danil Karpenko
-
 module magrx
 ( input  logic               clk
 , input  logic               arst
@@ -18,19 +14,17 @@ module magrx
     logic rst;
 
     logic [10:0] sync_idx;
-    logic [9:0] fft_idx;
+    logic [9:0] fft_idx, eq_idx;
     logic signed [11:0] sync_re, sync_im;
     logic signed [15:0] fft_re, fft_im;
+    logic signed [15:0] eq_re, eq_im;
 
     logic ce;
 
-    // Equalizer is Work in Progress,
-    // use fft output directly for now
-
     assign o_ce = ce;
-    assign o_idx = fft_idx;
-    assign o_re = fft_re;
-    assign o_im = fft_im;
+    assign o_idx = eq_idx;
+    assign o_re = eq_re;
+    assign o_im = eq_im;
 
     magrx_rst u_rst (clk, arst, rst);
 
@@ -63,6 +57,19 @@ module magrx
     , .o_idx(fft_idx)
     , .o_re(fft_re)
     , .o_im(fft_im)
+    );
+
+    magrx_eq u_eq
+    ( .clk(clk)
+
+    , .i_ce(ce)
+    , .i_idx(fft_idx)
+    , .i_re(fft_re)
+    , .i_im(fft_im)
+
+    , .o_idx(eq_idx)
+    , .o_re(eq_re)
+    , .o_im(eq_im)
     );
 
 endmodule

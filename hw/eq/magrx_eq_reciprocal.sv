@@ -14,15 +14,12 @@ module magrx_eq_reciprocal #
 , output logic [O-1:0] o_rec
 );
 
-    wire _unused = i_den[I-1];
-
     wire [S-1:0] addr_0 = i_den[I-2-:S];
     wire [I-S-2:0] dx_0 = i_den[I-S-2:0];
 
     // 1: Access ROM
 
     logic [O*2-1:0] rom_1 [2 ** S];
-
     logic [O-1:0] slope_1, rec_1;
     logic [I-S-2:0] dx_1;
 
@@ -72,9 +69,13 @@ module magrx_eq_reciprocal #
 
     // 3: Refine
 
+    logic [O-1:0] rec_3;
+
+    assign o_rec = rec_3;
+
     always_ff @(posedge clk) begin
         if (i_ce) begin
-            o_rec <= O'(rec_2 - (fine_2 >> I));
+            rec_3 <= O'(rec_2 - (fine_2 >> I));
         end
     end
 

@@ -47,10 +47,15 @@ module magrx_fft_1024 #
     magrx_fft_sdf #(N, 4, IW + 8, TW)
         u_sdf4 (clk, i_ce, idx_3, idx_4, re_3, im_3, re_4, im_4);
 
-    magrx_fft_round #(IW + 10, OW)
-        u_round_re (clk, i_ce, re_4, o_re);
+    always_ff @(posedge clk) begin
+        o_re <= re_4;
+        o_im <= im_4;
+    end
 
-    magrx_fft_round #(IW + 10, OW)
-        u_round_im (clk, i_ce, im_4, o_im);
+    // magrx_fft_round #(IW + 10, OW)
+    //     u_round_re (clk, i_ce, re_4, o_re);
+
+    // magrx_fft_round #(IW + 10, OW)
+    //     u_round_im (clk, i_ce, im_4, o_im);
 
 endmodule

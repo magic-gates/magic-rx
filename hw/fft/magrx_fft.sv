@@ -15,7 +15,7 @@ module magrx_fft
     logic ce;
     logic [9:0] t_idx, f_idx;
 
-    logic signed [15:0] t_re, t_im;
+    logic signed [12:0] t_re, t_im;
 
     assign o_ce = ce;
 
