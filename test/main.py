@@ -6,18 +6,18 @@ import matplotlib.pyplot as plt
 
 FFT_LEN = 1024
 CP_LEN = 64
-N_SYM = 400
+N_SYM = 300
 N_PILOT = 64
 QAM_ORDER = 4
 SKIP_SYM = 100
 
-GB = 1
+GB = 0
 PILOT_SC = np.arange(N_PILOT) * (FFT_LEN // N_PILOT)
 DATA_SC = np.concatenate((
     np.arange(1, FFT_LEN / 2 - GB, dtype=int),
     np.arange(FFT_LEN / 2 + GB, FFT_LEN, dtype=int)
 ))
-DATA_SC = DATA_SC[~np.isin(DATA_SC, PILOT_SC)]
+PLOT_SC = DATA_SC[~np.isin(DATA_SC, PILOT_SC)]
 
 @cocotb.test()
 async def test(dut):
@@ -48,7 +48,7 @@ async def rx(dut):
                 rx_sym += 1
             last_idx = idx
 
-            if idx in DATA_SC and rx_sym > SKIP_SYM:
+            if idx in PLOT_SC and (rx_sym > SKIP_SYM):
                 re = dut.o_re.value.to_signed()
                 im = dut.o_im.value.to_signed()
                 captured.append(complex(re, im))
@@ -93,9 +93,10 @@ def apply_paths(signal, taps):
     return np.convolve(signal, taps, mode='same')
 
 def plot(s):
-    plt.figure(figsize=(10, 8))
-    plt.hist2d(s.real, s.imag, bins=256, cmap='viridis')
-    plt.colorbar(label='Density')
+    plt.figure(figsize=(10, 10))
+    plt.scatter(s.real, s.imag, s=0.2)
+    # plt.hist2d(s.real, s.imag, bins=1024, cmap='viridis')
+    # plt.colorbar(label='Density')
     plt.title(f"Constellation Heatmap")
     plt.xlabel("Re")
     plt.ylabel("Im")

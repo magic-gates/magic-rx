@@ -75,14 +75,16 @@ module magrx_eq_zf #
 
     // 5: Scale
 
+    localparam logic [16:0] ROUND = 1 << 17;
+
     wire signed [18+16-1:0] scale_4 = rec_4 << zc_4;
     wire signed [34+16-1:0] prod_re_4 = re_4 * $signed({1'b0, scale_4});
     wire signed [34+16-1:0] prod_im_4 = im_4 * $signed({1'b0, scale_4});
 
     always_ff @(posedge clk) begin
         if (i_ce) begin
-            o_re <= prod_re_4 >>> 18;
-            o_im <= prod_im_4 >>> 18;
+            o_re <= (prod_re_4[18+16] ? prod_re_4 - ROUND : prod_re_4 + ROUND) >>> 18;
+            o_im <= (prod_im_4[18+16] ? prod_im_4 - ROUND : prod_im_4 + ROUND) >>> 18;
         end
     end
 

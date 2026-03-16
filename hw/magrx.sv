@@ -32,8 +32,6 @@ module magrx
     ( .DW(12)
     , .LEN(1024)
     , .CP(64)
-    , .SF(4)
-    , .DB(8)
     ) u_sync
     ( .clk(clk)
     , .rst(rst)

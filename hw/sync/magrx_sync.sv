@@ -5,10 +5,6 @@ module magrx_sync #
 , parameter int LEN = 1024
 // Length of the Cyclic Prefix
 , parameter int CP = 64
-// Smoothing factor
-, parameter int SF = 4
-// Deadband
-, parameter int DB = 8
 
 // Sampling index width
 , parameter int ID = $clog2(LEN + CP)
@@ -37,7 +33,7 @@ module magrx_sync #
     logic signed [METRIC_WIDTH-1:0] d_re, d_im;
 
     logic err_valid;
-    logic signed [ID-1:0] err;
+    logic [1:0] err;
 
     logic f_valid;
     logic signed [19:0] f_err;
@@ -113,8 +109,6 @@ module magrx_sync #
     magrx_sync_filter #
     ( .LEN(LEN)
     , .CP(CP)
-    , .SF(SF)
-    , .DB(DB)
     ) u_filter
     ( .clk(clk)
 

@@ -48,8 +48,10 @@ module magrx_fft_1024 #
         u_sdf4 (clk, i_ce, idx_3, idx_4, re_3, im_3, re_4, im_4);
 
     always_ff @(posedge clk) begin
-        o_re <= re_4;
-        o_im <= im_4;
+        if (i_ce) begin
+            o_re <= re_4;
+            o_im <= im_4;
+        end
     end
 
     // magrx_fft_round #(IW + 10, OW)

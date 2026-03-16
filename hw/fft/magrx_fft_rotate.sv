@@ -40,10 +40,10 @@ module magrx_fft_rotate #
         end
     end
 
-    magrx_fft_round #(DW+TW, DW, 1) u_round_re
+    magrx_fft_round #(DW+TW, TW-1, 1) u_round_re
         (clk, i_ce, r_re, o_re);
 
-    magrx_fft_round #(DW+TW, DW, 1) u_round_im
+    magrx_fft_round #(DW+TW, TW-1, 1) u_round_im
         (clk, i_ce, r_im, o_im);
 
 endmodule

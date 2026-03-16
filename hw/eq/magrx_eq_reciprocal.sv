@@ -57,12 +57,14 @@ module magrx_eq_reciprocal #
 
     // 2: Compute fine adjustment
 
+    localparam logic [O+S-2:0] ROUND = 1 << (I - 1);
+
     logic [O+S-2:0] fine_2;
     logic [O-1:0] rec_2;
 
     always_ff @(posedge clk) begin
        if (i_ce) begin
-           fine_2 <= (O+S-1)'(slope_1 * dx_1 + (1 << I - 1));
+           fine_2 <= (O+S-1)'(slope_1 * dx_1 + ROUND);
            rec_2 <= rec_1;
        end
     end

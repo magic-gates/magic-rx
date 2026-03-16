@@ -1,10 +1,6 @@
 module magrx_sync_filter #
 ( parameter int LEN = 1024
 , parameter int CP = 64
-// Smoothing factor
-, parameter int SF = 4
-// Deadband
-, parameter int DB = 8
 
 , parameter int ID = $clog2(LEN + CP)
 )
@@ -14,66 +10,38 @@ module magrx_sync_filter #
 , input  logic        [ID-1:0] i_idx
 
 , output logic                 o_valid
-, output logic signed [ID-1:0] o_err
+, output logic        [   1:0] o_err
 );
 
-    // 1: Wrap around
+    localparam logic [ID-1:0] HALF_LEN = ID'((LEN + CP) / 2);
 
-    localparam int HALF_LEN = (LEN + CP) / 2;
+    // 1: Deviation
+
+    wire [ID-1:0] idx = i_idx;
 
     logic dev_valid;
     logic signed [ID-1:0] dev;
 
     always_ff @(posedge clk) begin
-        dev_valid <= i_valid;
-
         if (i_valid) begin
-            dev <= i_idx >= HALF_LEN ? ID'(i_idx - LEN) : i_idx;
+            dev <= idx >= HALF_LEN ? ID'(idx - LEN) : idx;
         end
     end
 
-    // 2: Glitch filter
+    always_ff @(posedge clk) begin
+        dev_valid <= i_valid;
+    end
 
-    logic signed [ID-1:0] dev_d;
-    logic filtered_valid;
-
-    wire [ID-1:0] diff = dev > dev_d ? dev - dev_d : dev_d - dev;
+    // 2: Clamp
 
     always_ff @(posedge clk) begin
-        filtered_valid <= dev_valid && diff < CP;
-
         if (dev_valid) begin
-            dev_d <= dev;
+            o_err <= dev < 0 ? -2'sd1 : dev > 0 ? 2'sd1 : 2'sd0;
         end
     end
 
-    // 3: Smoothing
-
-    logic signed [ID+SF-1:0] acc;
-    logic acc_valid;
-
     always_ff @(posedge clk) begin
-        acc_valid <= filtered_valid;
-
-        if (filtered_valid) begin
-            acc <= acc + (((dev_d << SF) - acc) >>> SF);
-        end
-    end
-
-    // 4: Deadband
-
-    wire signed [ID-1:0] err = acc >>> SF;
-
-    always_ff @(posedge clk) begin
-        o_valid <= acc_valid;
-
-        if (acc_valid) begin
-            if (err > 0 && err < DB) begin
-                o_err <= 0;
-            end else begin
-                o_err <= err;
-            end
-        end
+        o_valid <= dev_valid;
     end
 
 endmodule

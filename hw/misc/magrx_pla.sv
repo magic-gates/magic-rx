@@ -11,14 +11,18 @@ module magrx_pla #
 
     generate if (L == 1) begin
         always_ff @(posedge clk) begin
-            o <= i;
+            if (i_ce) begin
+                o <= i;
+            end
         end
     end else if (L == 2) begin
         logic [W-1:0] d;
 
         always_ff @(posedge clk) begin
-            d <= i;
-            o <= d;
+            if (i_ce) begin
+                d <= i;
+                o <= d;
+            end
         end
     end else begin
         logic [W-1:0] line [L - 1];
