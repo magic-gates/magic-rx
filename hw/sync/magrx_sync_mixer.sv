@@ -126,23 +126,11 @@ module magrx_sync_mixer #
 
     // 4: Round
 
-    logic signed [DW-1:0] r_re, r_im;
+    magrx_sync_round #(DW+FW, FW-1) u_round_re
+        (clk, m_re, o_re);
 
-    magrx_sync_round #(DW+FW, DW) u_round_re
-        (clk, m_re, r_re);
-
-    magrx_sync_round #(DW+FW, DW) u_round_im
-        (clk, m_im, r_im);
-
-    // 5: Saturate
-
-    localparam logic signed [DW-1:0] MAX = (1 << (DW - 1)) - 1;
-    localparam logic signed [DW-1:0] MIN = 0 - (1 << (DW - 1));
-
-    always_ff @(posedge clk) begin
-        o_re <= r_re > MAX ? MAX : r_re < MIN ? MIN : r_re[DW-1:0];
-        o_im <= r_im > MAX ? MAX : r_im < MIN ? MIN : r_im[DW-1:0];
-    end
+    magrx_sync_round #(DW+FW, FW-1) u_round_im
+        (clk, m_im, o_im);
 
     initial begin : gen_lut
         int i;

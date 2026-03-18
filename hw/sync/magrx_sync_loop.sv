@@ -33,11 +33,9 @@ module magrx_sync_loop #
         end
     end
 
-    wire round = sum[DW-1] && (|sum[DW-2:0] || sum[DW]);
-
     always_ff @(posedge clk) begin
         if (i_valid) begin
-            o <= sum[DW*2-1:DW] + round;
+            o <= sum[DW*2-1:DW];
         end
     end
 

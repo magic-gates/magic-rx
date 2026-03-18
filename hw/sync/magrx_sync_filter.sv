@@ -10,7 +10,7 @@ module magrx_sync_filter #
 , input  logic        [ID-1:0] i_idx
 
 , output logic                 o_valid
-, output logic        [   1:0] o_err
+, output logic        [ID-1:0] o_err
 );
 
     localparam logic [ID-1:0] HALF_LEN = ID'((LEN + CP) / 2);

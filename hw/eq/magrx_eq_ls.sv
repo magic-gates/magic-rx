@@ -75,10 +75,16 @@ module magrx_eq_ls #
 
     // 2: Store Estimate and Access interpolation points
 
+    localparam logic [II-1:0] POS_IDX = 1;
+    localparam logic [II-1:0] NEG_IDX = {II{1'b1}};
+
     logic [DW*2-1:0] ls_rom_2 [2 ** II];
 
     logic signed [DW-1:0] h_re_2 [2];
     logic signed [DW-1:0] h_im_2 [2];
+
+    logic signed [DW-1:0] pos_re, pos_im;
+    logic signed [DW-1:0] neg_re, neg_im;
 
     logic signed [DW-1:0] re_2, im_2;
 
@@ -91,9 +97,28 @@ module magrx_eq_ls #
         if (i_ce) begin
             if (prb_1) begin
                 ls_rom_2[addr_a_1] <= {ls_re_1, ls_im_1};
+
+                if (addr_a_1 == POS_IDX) begin
+                    {pos_re, pos_im} <= {ls_re_1, ls_im_1};
+                end
+
+                if (addr_a_1 == NEG_IDX) begin
+                    {neg_re, neg_im} <= {ls_re_1, ls_im_1};
+                end
             end else begin
-                {h_re_2[0], h_im_2[0]} <= ls_rom_2[addr_a_1];
-                {h_re_2[1], h_im_2[1]} <= ls_rom_2[addr_b_1];
+                if (addr_a_1 == 0) begin
+                    h_re_2[0] <= (pos_re + neg_re) >>> 1;
+                    h_im_2[0] <= (pos_im + neg_im) >>> 1;
+                end else begin
+                    {h_re_2[0], h_im_2[0]} <= ls_rom_2[addr_a_1];
+                end
+
+                if (addr_b_1 == 0) begin
+                    h_re_2[1] <= (pos_re + neg_re) >>> 1;
+                    h_im_2[1] <= (pos_im + neg_im) >>> 1;
+                end else begin
+                    {h_re_2[1], h_im_2[1]} <= ls_rom_2[addr_b_1];
+                end
             end
         end
     end

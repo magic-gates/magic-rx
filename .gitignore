@@ -5,3 +5,5 @@ test/results.xml
 test/uv.lock
 test/*.fst
 test/*.fst.hier
+test/*.png
+test/*.bin

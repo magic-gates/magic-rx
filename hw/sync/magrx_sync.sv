@@ -33,17 +33,17 @@ module magrx_sync #
     logic signed [METRIC_WIDTH-1:0] d_re, d_im;
 
     logic err_valid;
-    logic [1:0] err;
+    logic [ID-1:0] err;
 
     logic f_valid;
-    logic signed [19:0] f_err;
+    logic signed [15:0] f_err;
 
     logic l_valid;
-    logic signed [19:0] l_err;
+    logic signed [15:0] l_err;
 
     magrx_sync_mixer #
     ( .DW(DW)
-    , .AW(20)
+    , .AW(16)
     , .DV($clog2(LEN))
     ) u_mixer
     ( .clk(clk)
@@ -120,24 +120,24 @@ module magrx_sync #
     );
 
     magrx_sync_cordic #
-    ( .DW(METRIC_WIDTH + 5)
-    , .AW(20)
-    , .S(20)
+    ( .DW(METRIC_WIDTH)
+    , .AW(16)
+    , .S(15)
     ) u_cordic
     ( .clk(clk)
     , .rst(rst)
 
     , .i_load(d_valid)
-    , .i_re({d_re[METRIC_WIDTH-1], d_re, 4'd0})
-    , .i_im({d_im[METRIC_WIDTH-1], d_im, 4'd0})
+    , .i_re(d_re)
+    , .i_im(d_im)
 
     , .o_valid(f_valid)
     , .o_angle(f_err)
     );
 
     magrx_sync_loop #
-    ( .DW(20)
-    , .KP(4)
+    ( .DW(16)
+    , .KP(3)
     , .KI(8)
     ) u_loop
     ( .clk(clk)

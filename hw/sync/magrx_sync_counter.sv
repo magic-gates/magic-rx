@@ -7,7 +7,7 @@ module magrx_sync_counter #
 ( input  logic          clk
 
 , input  logic          i_err_valid
-, input  logic [   1:0] i_err
+, input  logic [ID-1:0] i_err
 
 , output logic [ID-1:0] o_idx
 );

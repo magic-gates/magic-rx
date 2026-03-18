@@ -27,7 +27,7 @@ module magrx_fft_twiddle #
     always_ff @(posedge clk) begin
         if (i_ce) begin
             {r_re, r_im} <= {i_re, i_im};
-            o_idx <= i_idx - ID'(3);
+            o_idx <= i_idx - ID'(4);
         end
     end
 
