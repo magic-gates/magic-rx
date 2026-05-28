@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 
 FFT_LEN = 1024
 CP_LEN = 64
-N_SYM = 700
+N_SYM = 400
 N_PILOT = 64
 QAM_ORDER = 4
-SKIP_SYM = 350
-LOAD_SIGNAL = True
+SKIP_SYM = 200
+LOAD_SIGNAL = False
 
 GB = 0
 PILOT_SC = np.arange(N_PILOT) * (FFT_LEN // N_PILOT)
@@ -86,9 +86,9 @@ async def tx(dut, n_sym, pilots):
     tx_signal = test_signal(n_sym, pilots)
 
     tx_signal = apply_cfo(tx_signal, 0.4)
-    tx_signal = apply_paths(tx_signal, [1.0, 0.3 + 0.2j, 0.1j])
-    tx_signal = apply_awgn(tx_signal, 30)
-    tx_signal = tx_signal * 8196
+    # tx_signal = apply_paths(tx_signal, [1.0, 0.3 + 0.2j, 0.1j])
+    tx_signal = apply_awgn(tx_signal, 10)
+    tx_signal = tx_signal * 12_000
 
     await feed(dut, tx_signal)
 

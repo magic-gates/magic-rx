@@ -9,7 +9,6 @@ TOPLEVEL_LANG ?= verilog
 
 VERILOG_SOURCES += $(PWD)/dut.sv
 VERILOG_SOURCES += $(PWD)/../hw/*.sv
-VERILOG_SOURCES += $(PWD)/../hw/sync/*.sv
 VERILOG_SOURCES += $(PWD)/../hw/fft/*.sv
 VERILOG_SOURCES += $(PWD)/../hw/eq/*.sv
 VERILOG_SOURCES += $(PWD)/../hw/misc/*.sv

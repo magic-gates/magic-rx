@@ -30,7 +30,7 @@ module magrx
 
     magrx_sync #
     ( .DW(12)
-    , .LEN(1024)
+    , .N(1024)
     , .CP(64)
     ) u_sync
     ( .clk(clk)
