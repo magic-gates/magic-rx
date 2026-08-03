@@ -3,11 +3,10 @@ module magrx_sync #
 , parameter int N = 1024
 , parameter int CP = 64
 
-, parameter int VOCAP = 12
 , parameter int ANGLE = 16
 , parameter int CC_STAGES = 16
-, parameter int LOOP_KP = 3
-, parameter int LOOP_KI = 8
+, parameter int LOOP_KP = 2
+, parameter int LOOP_KI = 6
 , parameter int MX_LUT_DEPTH = 12
 , parameter int MX_LUT_WIDTH = DW + 2
 
@@ -29,18 +28,86 @@ module magrx_sync #
 
     logic [ID-1:0] idx;
 
-    wire [ID-1:0] mod = ID'(LEN - 1) - $signed({err_late, err_early});
+    wire [ID-1:0] mod = ID'(LEN - 1) + $signed({err_early, err_early | err_late});
+    wire idx_wrap = idx == mod;
 
-    assign o_idx = idx;
+    assign o_idx = mx_idx_3;
 
     always_ff @(posedge clk) begin
         if (rst) begin
             idx <= 0;
-        end else if (idx == mod) begin
+        end else if (idx_wrap) begin
             idx <= 0;
         end else begin
             idx <= idx + ID'(1);
         end
+    end
+
+    /* Digital AGC */
+
+    wire [DW-2:0] agc_re_abs = (i_re < 0) ? (-i_re) : (i_re);
+    wire [DW-2:0] agc_im_abs = (i_im < 0) ? (-i_im) : (i_im);
+    logic signed [DW-1:0] agc_re, agc_im;
+    logic [DW-2:0] agc_value;
+    logic [ID-1:0] agc_idx;
+    logic idx_wrap_0;
+
+    always_ff @(posedge clk) begin
+        agc_value <= agc_re_abs > agc_im_abs ? agc_re_abs : agc_im_abs;
+        {agc_re, agc_im} <= {i_re, i_im};
+        agc_idx <= idx;
+        idx_wrap_0 <= idx_wrap;
+    end
+
+    logic [DW-2:0] agc_max;
+    logic signed [DW-1:0] agc_re_0, agc_im_0;
+    logic [ID-1:0] agc_idx_0;
+    logic idx_wrap_1;
+
+    always_ff @(posedge clk) begin
+        if (agc_value > agc_max || agc_idx == 0) begin
+            agc_max <= agc_value;
+        end
+
+        {agc_re_0, agc_im_0} <= {agc_re, agc_im};
+        agc_idx_0 <= agc_idx;
+        idx_wrap_1 <= idx_wrap_0;
+    end
+
+    localparam int GAIN_WIDTH = $clog2(DW);
+    localparam int GAIN_ACC_WIDTH = GAIN_WIDTH + 4;
+
+    logic [GAIN_WIDTH-1:0] agc_lzc;
+    logic signed [GAIN_ACC_WIDTH-1:0] gain_acc;
+    logic signed [DW-1:0] ga_re, ga_im;
+    logic [ID-1:0] agc_idx_1;
+
+    wire [GAIN_WIDTH-1:0] gain = gain_acc[GAIN_ACC_WIDTH-1-:GAIN_WIDTH];
+
+    always_comb begin
+        agc_lzc = DW - 1;
+
+        for (int i = DW - 2; i >= 0; i--) begin
+            if (agc_max[i]) begin
+                agc_lzc = DW - 2 - i;
+                break;
+            end
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            gain_acc <= 0;
+        end else if (idx_wrap_1) begin
+            gain_acc <= gain_acc + (($signed({1'b0, agc_lzc, 4'd0}) - gain_acc) >>> 2);
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        ga_re <= agc_re_0 << gain;
+        ga_im <= agc_im_0 << gain;
+
+        agc_idx_1 <= agc_idx_0;
     end
 
     /* Metric */
@@ -66,7 +133,7 @@ module magrx_sync #
     wire ri = o_re[DW-1] ^ d_im;
 
     always_ff @(posedge clk) begin
-        idx_1 <= idx;
+        idx_1 <= mx_idx_3;
 
         p_re <= {rr & ii, rr ~^ ii};
         p_im <= {ir & ~ri, ir ^ ri};
@@ -96,12 +163,12 @@ module magrx_sync #
     logic [MW-1:0] m_re_1, m_im_1;
 
     logic [MW-1:0] m_abs_re_gt_im;
-    logic [ID-1:0] idx_8;
+    logic [ID-1:0] idx_3;
 
     always_ff @(posedge clk) begin
         m_abs_re_gt_im <= m_abs_re > m_abs_im;
         {m_re_1, m_im_1} <= {m_re, m_im};
-        idx_8 <= idx_2;
+        idx_3 <= idx_2;
     end
 
     wire [MW-1:0] m_abs_max = m_abs_re_gt_im ? m_abs_re : m_abs_im;
@@ -110,12 +177,12 @@ module magrx_sync #
     logic [MW-1:0] m_re_2, m_im_2;
 
     logic [MW-1:0] m_mag;
-    logic [ID-1:0] idx_9;
+    logic [ID-1:0] idx_4;
 
     always_ff @(posedge clk) begin
         m_mag <= m_abs_max + (m_abs_min >>> 1);
         {m_re_2, m_im_2} <= {m_re_1, m_im_1};
-        idx_9 <= idx_8;
+        idx_4 <= idx_3;
     end
 
     /* Peak search window */
@@ -126,12 +193,13 @@ module magrx_sync #
     logic [MW-1:0] last_peak;
     logic [ID-1:0] peak_idx;
 
-    wire boundary = idx == BOUNDARY;
+    wire boundary = mx_idx_3 == BOUNDARY;
+    wire peak_valid = last_peak > ID'(24);
 
     always_ff @(posedge clk) begin
         if (m_mag > last_peak || boundary) begin
             last_peak <= m_mag;
-            peak_idx <= idx_9;
+            peak_idx <= idx_4;
             {peak_re, peak_im} <= {m_re_2, m_im_2};
         end
     end
@@ -155,7 +223,7 @@ module magrx_sync #
     wire signed [MW-1:0] im_shr = cc_im >>> cc_stage;
 
     always_ff @(posedge clk) begin
-        if (boundary) begin
+        if (boundary && peak_valid) begin
             unique case ({peak_re[MW-1], peak_im[MW-1]})
                 2'b00,
                 2'b01: begin
@@ -207,49 +275,111 @@ module magrx_sync #
         assign atan[i] = int'($atan(2.0 ** -i) / $atan(1.0) * (2.0 ** (ANGLE - 3)));
     end endgenerate
 
-    /* Error Direction */
+    /* Timing Error */
 
-    localparam logic [ID-1:0] REF = N - 1;
+    // localparam int DEV = ID + 1;
+
+    // localparam logic [ID-1:0] REF = N - 1;
+    // localparam logic [ID-1:0] WRAP = (LEN / 2) - CP;
+    // localparam logic signed [ID-1:0] HALF = -(N / 2);
+
+    // wire signed [DEV-1:0] base_dev = peak_idx - REF;
+
+    // logic signed [DEV-1:0] dev;
+    // logic dev_valid;
+
+    // always_ff @(posedge clk) begin
+    //     if (boundary && peak_valid) begin
+    //         dev <= base_dev < HALF ? base_dev + LEN : base_dev;
+    //     end
+
+    //     dev_valid <= boundary;
+    // end
+
+    localparam logic [ID-1:0] REF = (N - 1) + 4;
     localparam logic [ID-1:0] WRAP = (LEN / 2) - CP;
 
-    logic vote_late;
-    logic vote_early;
-    logic vote_valid;
+    logic err_late;
+    logic err_early;
+    logic err_valid;
 
     always_ff @(posedge clk) begin
         if (boundary) begin
-            vote_late <= (peak_idx > REF) || (peak_idx <= WRAP - ID'(1));
-            vote_early <= (peak_idx < REF) && (peak_idx > WRAP);
+            err_late <= (peak_idx > REF) || (peak_idx <= WRAP - ID'(1));
+            err_early <= (peak_idx < REF) && (peak_idx > WRAP);
         end
 
-        vote_valid <= boundary;
+        err_valid <= boundary;
     end
 
-    /* Voting */
+    // logic signed [ID-1:0] err_acc;
+    // wire signed [ID-1:0] err = err_acc[ID-1-:ID];
+    // logic err_valid;
 
-    logic [VOCAP-1:0] early_votes;
-    logic [VOCAP-1:0] late_votes;
+    // always_ff @(posedge clk) begin
+    //     if (vote_valid) begin
+    //         err_acc <= err_acc + $signed({vote_early, vote_late});
+    //     end
 
-    wire err_early = early_votes[VOCAP-1];
-    wire err_late = late_votes[VOCAP-1];
+    //     err_valid <= vote_valid;
+    // end
 
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            early_votes <= VOCAP'(1);
-            late_votes <= VOCAP'(1);
-        end else if (vote_valid) begin
-            if (vote_early) begin
-                if (!err_early) early_votes <= early_votes << 1;
-                if (!late_votes[0]) late_votes <= late_votes >> 1;
-            end else if (vote_late) begin
-                if (!err_late) late_votes <= late_votes << 1;
-                if (!early_votes[0]) early_votes <= early_votes >> 1;
-            end else begin
-                if (!early_votes[0]) early_votes <= early_votes >> 1;
-                if (!late_votes[0]) late_votes <= late_votes >> 1;
-            end
-        end
-    end
+    // logic err_early;
+    // logic err_late;
+
+    // always_ff @(posedge clk) begin
+    //     if (err_valid) begin
+    //         if (err >= 4) begin
+    //             err_late <= 1'b1;
+    //             err_early <= 1'b0;
+    //         end else if (err <= -4) begin
+    //             err_late <= 1'b0;
+    //             err_early <= 1'b1;
+    //         end else begin
+    //             err_late <= 1'b0;
+    //             err_early <= 1'b0;
+    //         end
+    //     end
+    // end
+
+    // logic vote_late;
+    // logic vote_early;
+    // logic vote_valid;
+
+    // always_ff @(posedge clk) begin
+    //     if (boundary) begin
+    //         vote_late <= (peak_idx > REF) || (peak_idx <= WRAP - ID'(1));
+    //         vote_early <= (peak_idx < REF) && (peak_idx > WRAP);
+    //     end
+
+    //     vote_valid <= boundary;
+    // end
+
+    // /* Voting */
+
+    // logic [VOCAP-1:0] early_votes;
+    // logic [VOCAP-1:0] late_votes;
+
+    // wire err_early = early_votes[VOCAP-1];
+    // wire err_late = late_votes[VOCAP-1];
+
+    // always_ff @(posedge clk) begin
+    //     if (rst) begin
+    //         early_votes <= VOCAP'(1);
+    //         late_votes <= VOCAP'(1);
+    //     end else if (vote_valid) begin
+    //         if (vote_early) begin
+    //             if (!err_early) early_votes <= early_votes << 1;
+    //             if (!&late_votes[0]) late_votes <= late_votes >> 1;
+    //         end else if (vote_late) begin
+    //             if (!err_late) late_votes <= late_votes << 1;
+    //             if (!&early_votes[0]) early_votes <= early_votes >> 1;
+    //         end else begin
+    //             if (!&early_votes[1:0]) early_votes <= early_votes >> 1;
+    //             if (!&late_votes[1:0]) late_votes <= late_votes >> 1;
+    //         end
+    //     end
+    // end
 
     /* Loop Filter */
 
@@ -377,34 +507,53 @@ module magrx_sync #
     logic signed [DW-1:0] im_0;
     logic signed [FW-1:0] cos_0, sin_0;
 
-    always_ff @(posedge clk) begin
-        mx_s1 <= i_re - i_im;
-        mx_s2 <= cos - sin;
-        mx_s3 <= i_re + i_im;
+    logic [ID-1:0] mx_idx_0;
 
-        im_0 <= i_im;
+    always_ff @(posedge clk) begin
+        mx_s1 <= ga_re - ga_im;
+        mx_s2 <= cos - sin;
+        mx_s3 <= ga_re + ga_im;
+
+        im_0 <= ga_im;
         cos_0 <= cos;
         sin_0 <= sin;
+
+        mx_idx_0 <= agc_idx_1;
     end
 
     logic signed [DW+FW:0] mx_p1, mx_p2, mx_p3;
+
+    logic [ID-1:0] mx_idx_1;
 
     always_ff @(posedge clk) begin
         mx_p1 <= mx_s1 * cos_0;
         mx_p2 <= mx_s2 * im_0;
         mx_p3 <= mx_s3 * sin_0;
+
+        mx_idx_1 <= mx_idx_0;
     end
 
     logic signed [DW+FW-1:0] mx_re, mx_im;
 
+    logic [ID-1:0] mx_idx_2;
+
     always_ff @(posedge clk) begin
         mx_re <= (DW+FW)'(mx_p1 + mx_p2);
         mx_im <= (DW+FW)'(mx_p2 + mx_p3);
+
+        mx_idx_2 <= mx_idx_1;
     end
 
+    logic [ID-1:0] mx_idx_3;
+
+    magrx_round #(DW+FW, FW-1, 1) u_mx_round_re
+        (clk, 1'b1, mx_re, o_re);
+
+    magrx_round #(DW+FW, FW-1, 1) u_mx_round_im
+        (clk, 1'b1, mx_im, o_im);
+
     always_ff @(posedge clk) begin
-        o_re <= mx_re >>> (FW-1);
-        o_im <= mx_im >>> (FW-1);
+        mx_idx_3 <= mx_idx_2;
     end
 
     initial begin : gen_mx_lut

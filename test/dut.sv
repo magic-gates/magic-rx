@@ -7,7 +7,7 @@ module dut
 , input  logic signed [11:0] i_re
 , input  logic signed [11:0] i_im
 
-, output logic               o_ce
+, output logic               o_valid
 , output logic        [ 9:0] o_idx
 , output logic signed [15:0] o_re
 , output logic signed [15:0] o_im
@@ -20,7 +20,7 @@ module dut
     , .i_re(i_re)
     , .i_im(i_im)
 
-    , .o_ce(o_ce)
+    , .o_valid(o_valid)
     , .o_idx(o_idx)
     , .o_re(o_re)
     , .o_im(o_im)

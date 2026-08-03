@@ -9,9 +9,9 @@ TOPLEVEL_LANG ?= verilog
 
 VERILOG_SOURCES += $(PWD)/dut.sv
 VERILOG_SOURCES += $(PWD)/../hw/*.sv
-VERILOG_SOURCES += $(PWD)/../hw/fft/*.sv
-VERILOG_SOURCES += $(PWD)/../hw/eq/*.sv
-VERILOG_SOURCES += $(PWD)/../hw/misc/*.sv
+# VERILOG_SOURCES += $(PWD)/../hw/fft/*.sv
+# VERILOG_SOURCES += $(PWD)/../hw/eq/*.sv
+# VERILOG_SOURCES += $(PWD)/../hw/misc/*.sv
 # use VHDL_SOURCES for VHDL files
 
 COMPILE_ARGS += -Wno-WIDTHEXPAND -Wno-WIDTHTRUNC

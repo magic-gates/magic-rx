@@ -1,3 +1,5 @@
+#! /usr/bin/env python
+
 import signal
 from cocotb.triggers import RisingEdge
 from cocotb.clock import Clock
@@ -14,7 +16,7 @@ SKIP_SYM = 200
 LOAD_SIGNAL = False
 
 GB = 0
-PILOT_SC = np.arange(N_PILOT) * (FFT_LEN // N_PILOT)
+PILOT_SC = np.arange(N_PILOT) * (FFT_LEN // N_PILOT) + 8
 DATA_SC = np.concatenate((
     np.arange(1, FFT_LEN / 2 - GB, dtype=int),
     np.arange(FFT_LEN / 2 + GB, FFT_LEN, dtype=int)
@@ -51,7 +53,7 @@ async def rx(dut):
     while rx_sym < N_SYM - 1:
         await RisingEdge(dut.clk)
 
-        if dut.o_ce.value == 1:
+        if dut.o_valid.value == 1:
             idx = dut.o_idx.value.to_unsigned()
 
             if idx != last_idx and idx == FFT_LEN - 1:
@@ -68,11 +70,13 @@ async def rx(dut):
 def test_signal(n_sym, pilots):
     tx_signal = np.array([], dtype=complex)
 
-    for _ in range(n_sym):
+    for idx in range(n_sym):
         f_symbol = np.zeros(FFT_LEN, dtype=complex)
 
-        f_symbol[DATA_SC] = generate_qpsk(len(DATA_SC))
+        f_symbol[DATA_SC] = generate_64qam(len(DATA_SC))
+
         f_symbol[PILOT_SC] = pilots
+
         f_symbol[0] = 0
 
         t_symbol = np.fft.ifft(f_symbol)
@@ -86,11 +90,11 @@ async def tx(dut, n_sym, pilots):
     tx_signal = test_signal(n_sym, pilots)
 
     tx_signal = apply_cfo(tx_signal, 0.4)
-    # tx_signal = apply_paths(tx_signal, [1.0, 0.3 + 0.2j, 0.1j])
-    tx_signal = apply_awgn(tx_signal, 10)
+    tx_signal = apply_paths(tx_signal, [1.0, 0.3 + 0.2j, 0.1j])
+    tx_signal = apply_awgn(tx_signal, 35)
     tx_signal = tx_signal * 12_000
 
-    await feed(dut, tx_signal)
+    await feed(dut, tx_signal[62:])
 
 async def feed(dut, signal):
     for sample in signal:
@@ -131,7 +135,7 @@ def generate_64qam(size):
     im = np.random.choice(qam_vals, size)
     syms = re + 1j * im
     # Average power of 64-QAM is 42, normalize to power = 1
-    return syms / np.sqrt(42)
+    return syms / 7.0
 
 def generate_qpsk(n):
     symbols = np.array([1+0j, 1j, -1+0j, -1j])

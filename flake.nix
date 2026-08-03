@@ -24,6 +24,8 @@
       {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
+            stdenv.cc.cc.lib
+
             python313
             uv
 
@@ -33,6 +35,12 @@
           ];
 
           shellHook = ''
+            export LD_LIBRARY_PATH=${
+              pkgs.lib.makeLibraryPath [
+                pkgs.stdenv.cc.cc.lib
+                pkgs.zlib
+              ]
+            };
             if [ ! -d .venv ]; then
               uv venv
             fi
