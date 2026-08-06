@@ -518,7 +518,7 @@ module zerochan_lib_fft_rom #
         localparam int MAX = ((1 << TWIDDLE_WIDTH - 1) - 1);
         localparam int MIN = (0 - (1 << TWIDDLE_WIDTH - 1));
 
-        var automatic real scaled = x * (1 << TWIDDLE_WIDTH - 1);
+        var automatic real scaled = x * (1 << TWIDDLE_WIDTH - 1) * $cos($atan(1.0));
         var automatic int v = $rtoi(scaled >= 0.0 ? scaled + 0.5 : scaled - 0.5);
 
         if (v > MAX) v = MAX;
