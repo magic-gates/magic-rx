@@ -1,4 +1,4 @@
-module magrx_sync #
+module zerochan_rx_sync #
 ( parameter int DW = 12
 , parameter int N = 1024
 , parameter int CP = 64
@@ -296,7 +296,7 @@ module magrx_sync #
     //     dev_valid <= boundary;
     // end
 
-    localparam logic [ID-1:0] REF = (N - 1) + 4;
+    localparam logic [ID-1:0] REF = (N - 1);
     localparam logic [ID-1:0] WRAP = (LEN / 2) - CP;
 
     logic err_late;
@@ -507,54 +507,24 @@ module magrx_sync #
     logic signed [DW-1:0] im_0;
     logic signed [FW-1:0] cos_0, sin_0;
 
-    logic [ID-1:0] mx_idx_0;
+    logic [ID-1:0] mx_idx_0, mx_idx_1, mx_idx_2, mx_idx_3;
+
+    logic signed [DW+FW+1:0] mx_re, mx_im;
+
+    assign o_re = mx_re[DW+FW-1:0];
+    assign o_im = mx_im[DW+FW-1:0];
 
     always_ff @(posedge clk) begin
-        mx_s1 <= ga_re - ga_im;
-        mx_s2 <= cos - sin;
-        mx_s3 <= ga_re + ga_im;
-
-        im_0 <= ga_im;
-        cos_0 <= cos;
-        sin_0 <= sin;
-
         mx_idx_0 <= agc_idx_1;
-    end
-
-    logic signed [DW+FW:0] mx_p1, mx_p2, mx_p3;
-
-    logic [ID-1:0] mx_idx_1;
-
-    always_ff @(posedge clk) begin
-        mx_p1 <= mx_s1 * cos_0;
-        mx_p2 <= mx_s2 * im_0;
-        mx_p3 <= mx_s3 * sin_0;
-
         mx_idx_1 <= mx_idx_0;
-    end
-
-    logic signed [DW+FW-1:0] mx_re, mx_im;
-
-    logic [ID-1:0] mx_idx_2;
-
-    always_ff @(posedge clk) begin
-        mx_re <= (DW+FW)'(mx_p1 + mx_p2);
-        mx_im <= (DW+FW)'(mx_p2 + mx_p3);
-
         mx_idx_2 <= mx_idx_1;
-    end
-
-    logic [ID-1:0] mx_idx_3;
-
-    magrx_round #(DW+FW, FW-1, 1) u_mx_round_re
-        (clk, 1'b1, mx_re, o_re);
-
-    magrx_round #(DW+FW, FW-1, 1) u_mx_round_im
-        (clk, 1'b1, mx_im, o_im);
-
-    always_ff @(posedge clk) begin
         mx_idx_3 <= mx_idx_2;
     end
+
+    zerochan_lib_mult_4
+        #(DW, FW, FW-1)
+    u_mult
+        (clk, 1'b1, ga_re, ga_im, cos, sin, mx_re, mx_im);
 
     initial begin : gen_mx_lut
         int i;
@@ -581,4 +551,4 @@ module magrx_sync #
         return v;
     endfunction
 
-endmodule
+endmodule : zerochan_rx_sync

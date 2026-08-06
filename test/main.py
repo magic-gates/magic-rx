@@ -1,6 +1,3 @@
-#! /usr/bin/env python
-
-import signal
 from cocotb.triggers import RisingEdge
 from cocotb.clock import Clock
 import cocotb
@@ -8,37 +5,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 FFT_LEN = 1024
-CP_LEN = 64
-N_SYM = 400
-N_PILOT = 64
-QAM_ORDER = 4
-SKIP_SYM = 200
-LOAD_SIGNAL = False
-
-GB = 0
-PILOT_SC = np.arange(N_PILOT) * (FFT_LEN // N_PILOT) + 8
-DATA_SC = np.concatenate((
-    np.arange(1, FFT_LEN / 2 - GB, dtype=int),
-    np.arange(FFT_LEN / 2 + GB, FFT_LEN, dtype=int)
-))
-PLOT_SC = DATA_SC[~np.isin(DATA_SC, PILOT_SC)]
+N_SYM = 300_000
+SKIP_SYM = 200_000
 
 @cocotb.test()
 async def test(dut):
     Clock(dut.clk, 10, unit="ns").start()
     await reset(dut)
 
-    pilots = load_pilots("pilots.mem")
-
-    # signal = test_signal(N_SYM, pilots)
-
-    # write_signal(signal)
-
-    if LOAD_SIGNAL:
-        signal = load_signal()
-        cocotb.start_soon(feed(dut, signal))
-    else:
-        cocotb.start_soon(tx(dut, N_SYM, pilots));
+    cocotb.start_soon(tx(dut, N_SYM));
+    cocotb.start_soon(channel(dut))
 
     captured = await rx(dut)
 
@@ -46,79 +22,87 @@ async def test(dut):
 
 async def rx(dut):
     rx_sym = 0
-    last_idx = -1
 
     captured = []
 
-    while rx_sym < N_SYM - 1:
+    while rx_sym < N_SYM - 20_000:
         await RisingEdge(dut.clk)
 
-        if dut.o_valid.value == 1:
-            idx = dut.o_idx.value.to_unsigned()
+        if dut.o_rx_valid.value == 1:
+            idx = dut.o_rx_idx.value.to_unsigned()
+            rx_sym += 1
 
-            if idx != last_idx and idx == FFT_LEN - 1:
-                rx_sym += 1
-            last_idx = idx
-
-            if idx in PLOT_SC and (rx_sym > SKIP_SYM):
-                re = dut.o_re.value.to_signed()
-                im = dut.o_im.value.to_signed()
+            if rx_sym > SKIP_SYM:
+                re = dut.o_rx_re.value.to_signed()
+                im = dut.o_rx_im.value.to_signed()
                 captured.append(complex(re, im))
 
     return np.array(captured)
 
-def test_signal(n_sym, pilots):
-    tx_signal = np.array([], dtype=complex)
+def test_signal(n_sym):
+    # return np.full(n_sym, 0 + 0j)
+    return generate_64qam(n_sym) * 511.0
 
-    for idx in range(n_sym):
-        f_symbol = np.zeros(FFT_LEN, dtype=complex)
+async def channel(dut):
+    """Sample-by-sample channel processing loop."""
+    cfo_effect = CFOChannel(cfo=0.4)
+    path_effect = MultipathChannel(taps=[1.0, 0.3 + 0.2j, 0.1j])
+    awgn_effect = AWGNChannel(snr_db=50, sig_pwr=2047.0**2)
 
-        f_symbol[DATA_SC] = generate_64qam(len(DATA_SC))
+    while True:
+        # Read sample from loopback output pins
+        re_in = dut.o_loop_re.value.to_signed()
+        im_in = dut.o_loop_im.value.to_signed()
+        sample = complex(re_in, im_in)
 
-        f_symbol[PILOT_SC] = pilots
+        # Apply channel pipeline sample by sample
+        sample = cfo_effect.apply(sample)
+        sample = path_effect.apply(sample)
+        sample = awgn_effect.apply(sample)
 
-        f_symbol[0] = 0
+        dut.i_loop_re.value = int(
+            np.clip(sample.real, -2048, 2047).astype(np.int16)
+        )
+        dut.i_loop_im.value = int(
+            np.clip(sample.imag, -2048, 2047).astype(np.int16)
+        )
 
-        t_symbol = np.fft.ifft(f_symbol)
-        cp = t_symbol[-CP_LEN:]
-        full_symbol = np.concatenate([cp, t_symbol])
-        tx_signal = np.concatenate((tx_signal, full_symbol))
+        # dut.i_loop_re.value = dut.o_loop_re.value;
+        # dut.i_loop_im.value = dut.o_loop_im.value;
 
-    return tx_signal
+        await RisingEdge(dut.clk)
 
-async def tx(dut, n_sym, pilots):
-    tx_signal = test_signal(n_sym, pilots)
-
-    tx_signal = apply_cfo(tx_signal, 0.4)
-    tx_signal = apply_paths(tx_signal, [1.0, 0.3 + 0.2j, 0.1j])
-    tx_signal = apply_awgn(tx_signal, 35)
-    tx_signal = tx_signal * 12_000
-
-    await feed(dut, tx_signal[62:])
+async def tx(dut, n_sym):
+    tx_signal = test_signal(n_sym)
+    await feed(dut, tx_signal)
 
 async def feed(dut, signal):
     for sample in signal:
-        dut.i_re.value = int(np.clip(sample.real, -2048, 2047).astype(np.int16))
-        dut.i_im.value = int(np.clip(sample.imag, -2048, 2047).astype(np.int16))
+        dut.i_tx_re.value = int(np.clip(sample.real, -512, 511).astype(np.int16))
+        dut.i_tx_im.value = int(np.clip(sample.imag, -512, 511).astype(np.int16))
+        dut.i_tx_valid.value = 1;
         await RisingEdge(dut.clk)
 
-def apply_awgn(signal, snr_db):
-    sig_pwr = np.mean(np.abs(signal)**2)
-    noise_pwr = sig_pwr / (10**(snr_db / 10))
-    noise = np.sqrt(noise_pwr / 2) * (np.random.randn(len(signal)) + 1j * np.random.randn(len(signal)))
-    return signal + noise
+        if (dut.o_tx_ready.value != 1):
+            await RisingEdge(dut.o_tx_ready)
 
-def apply_cfo(signal, cfo):
-    t = np.arange(len(signal))
-    return signal * np.exp(1j * 2 * np.pi * cfo * t / FFT_LEN)
+# def apply_awgn(signal, snr_db):
+#     sig_pwr = np.mean(np.abs(signal)**2)
+#     noise_pwr = sig_pwr / (10**(snr_db / 10))
+#     noise = np.sqrt(noise_pwr / 2) * (np.random.randn(len(signal)) + 1j * np.random.randn(len(signal)))
+#     return signal + noise
 
-def apply_paths(signal, taps):
-    return np.convolve(signal, taps, mode='same')
+# def apply_cfo(signal, cfo):
+#     t = np.arange(len(signal))
+#     return signal * np.exp(1j * 2 * np.pi * cfo * t / FFT_LEN)
+
+# def apply_paths(signal, taps):
+#     return np.convolve(signal, taps, mode='same')
 
 def plot(s):
     plt.figure(figsize=(10, 10))
     plt.scatter(s.real, s.imag, s=0.2)
-    # plt.hist2d(s.real, s.imag, bins=512, cmap='viridis')
+    # plt.hist2d(s.real, s.imag, bins=256, cmap='viridis')
     # plt.colorbar(label='Density')
     plt.title(f"Constellation")
     plt.xlabel("Re")
@@ -134,65 +118,56 @@ def generate_64qam(size):
     re = np.random.choice(qam_vals, size)
     im = np.random.choice(qam_vals, size)
     syms = re + 1j * im
-    # Average power of 64-QAM is 42, normalize to power = 1
     return syms / 7.0
 
 def generate_qpsk(n):
     symbols = np.array([1+0j, 1j, -1+0j, -1j])
     return np.random.choice(symbols, size=n)
 
-def load_pilots(filename):
-    mapping = {'00': 1+0j, '01': 0+1j, '10': -1+0j, '11': 0-1j}
-    pilots = []
-    with open(filename, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line in mapping:
-                pilots.append(mapping[line])
-    return np.array(pilots)
-
-def bit_reverse(num, bits):
-    return int(f"{num:0{bits}b}"[::-1], 2)
-
-def reverse_array(a):
-    n = len(a)
-    bits = (n - 1).bit_length()
-
-    result = np.zeros_like(a)
-    for i, v in enumerate(a):
-        r = bit_reverse(i, bits)
-        result[r] = v
-    return result
-
-def load_signal():
-    data = np.fromfile("signal.bin", dtype=np.int16)
-    iq = data.reshape(-1, 2)
-    iq = (iq[:, 0] >> 4) + 1j * (iq[:, 1] >> 4)
-    return iq
-
-def write_signal(sig):
-    i = sig.real * 1500
-    q = sig.imag * 1500
-
-    i8 = np.clip(np.round(i), -128, 127).astype(np.int8)
-    q8 = np.clip(np.round(q), -128, 127).astype(np.int8)
-
-    iq = np.empty(2 * len(i8), dtype=np.int8)
-    iq[0::2] = i8
-    iq[1::2] = q8
-
-    positives = np.sum(i8 == 127) + np.sum(q8 == 127)
-    negatives = np.sum(i8 == -128) + np.sum(q8 == -128)
-    zeros = np.sum(i8 == 0) + np.sum(q8 == 0)
-
-    print("Clipping: ", positives)
-    print("Zeros: ", zeros)
-
-    iq.tofile("tx.bin")
-
 async def reset(dut):
     dut.arst.value = 1
-    dut.i_re.value = 0
-    dut.i_im.value = 0
     await RisingEdge(dut.clk)
     dut.arst.value = 0
+
+class CFOChannel:
+
+    def __init__(self, cfo, fft_len=FFT_LEN):
+        self.cfo = cfo
+        self.fft_len = fft_len
+        self.n = 0
+
+    def apply(self, sample: complex) -> complex:
+        phase = 2 * np.pi * self.cfo * self.n / self.fft_len
+        out = sample * np.exp(1j * phase)
+        self.n += 1
+        return out
+
+
+class MultipathChannel:
+
+    def __init__(self, taps):
+        self.taps = np.array(taps, dtype=complex)
+        # Buffer to store past samples for FIR filtering
+        self.buffer = np.zeros(len(taps), dtype=complex)
+
+    def apply(self, sample: complex) -> complex:
+        # Shift buffer and insert new sample at index 0
+        self.buffer = np.roll(self.buffer, 1)
+        self.buffer[0] = sample
+        # Compute dot product (FIR convolution step)
+        return np.dot(self.buffer, self.taps)
+
+
+class AWGNChannel:
+
+    def __init__(self, snr_db, sig_pwr=1.0):
+        self.snr_db = snr_db
+        # Pre-calculate noise standard deviation per real/imag dimension
+        noise_pwr = sig_pwr / (10 ** (snr_db / 10))
+        self.std_dev = np.sqrt(noise_pwr / 2)
+
+    def apply(self, sample: complex) -> complex:
+        noise = self.std_dev * (
+            np.random.randn() + 1j * np.random.randn()
+        )
+        return sample + noise

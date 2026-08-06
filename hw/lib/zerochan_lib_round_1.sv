@@ -1,8 +1,7 @@
-module magrx_round #
+module zerochan_lib_round_1 #
 ( parameter int INPUT = 16
 , parameter int ROUND = 16
-, parameter bit SIGNED = 1
-, parameter int OUTPUT = INPUT - ROUND - SIGNED
+, parameter int OUTPUT = INPUT - ROUND
 )
 ( input  logic                     clk
 
@@ -29,4 +28,4 @@ module magrx_round #
         end
     end
 
-endmodule
+endmodule : zerochan_lib_round_1

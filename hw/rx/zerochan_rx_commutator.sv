@@ -1,4 +1,4 @@
-module magrx_commutator #
+module zerochan_rx_commutator #
 ( parameter int PERMUT_SIZE = 1024
 , parameter int DATA_WIDTH = 22
 , parameter int OUTPUT_WIDTH = 16
@@ -59,18 +59,7 @@ module magrx_commutator #
     logic [INDEX_WIDTH-1:0] fwd_idx, rev_idx;
     logic [GAIN_WIDTH-1:0] agc_lzc, gain;
 
-    // lzc #(DATA_WIDTH-1) u_lzc (agc_max_1, agc_lzc);
-
-    always_comb begin
-        agc_lzc = DATA_WIDTH - 1;
-
-        for (int i = DATA_WIDTH - 2; i >= 0; i--) begin
-            if (agc_max_1[i]) begin
-                agc_lzc = DATA_WIDTH - 2 - i;
-                break;
-            end
-        end
-    end
+    zerochan_lib_lzc_0 #(DATA_WIDTH-1) u_lzc (agc_max_1, agc_lzc);
 
     always_ff @(posedge clk) begin
         if (i_ce) begin
@@ -130,10 +119,10 @@ module magrx_commutator #
         end
     end
 
-    magrx_round #(DATA_WIDTH, DATA_WIDTH-OUTPUT_WIDTH, 0) u_round_re
+    zerochan_lib_round_1 #(DATA_WIDTH, DATA_WIDTH-OUTPUT_WIDTH) u_round_re
         (clk, i_ce, amp_re, o_re);
 
-    magrx_round #(DATA_WIDTH, DATA_WIDTH-OUTPUT_WIDTH, 0) u_round_im
+    zerochan_lib_round_1 #(DATA_WIDTH, DATA_WIDTH-OUTPUT_WIDTH) u_round_im
         (clk, i_ce, amp_im, o_im);
 
     always_ff @(posedge clk) begin
@@ -142,4 +131,4 @@ module magrx_commutator #
         end
     end
 
-endmodule
+endmodule : zerochan_rx_commutator

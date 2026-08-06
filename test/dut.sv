@@ -4,26 +4,48 @@ module dut
 ( input  logic               clk
 , input  logic               arst
 
-, input  logic signed [11:0] i_re
-, input  logic signed [11:0] i_im
+, input  logic               i_tx_valid
+, output logic               o_tx_ready
+, input  logic signed [11:0] i_tx_re
+, input  logic signed [11:0] i_tx_im
 
-, output logic               o_valid
-, output logic        [ 9:0] o_idx
-, output logic signed [15:0] o_re
-, output logic signed [15:0] o_im
+, output logic signed [11:0] o_loop_re
+, output logic signed [11:0] o_loop_im
+
+, input  logic signed [11:0] i_loop_re
+, input  logic signed [11:0] i_loop_im
+
+, output logic               o_rx_valid
+, output logic        [ 9:0] o_rx_idx
+, output logic signed [15:0] o_rx_re
+, output logic signed [15:0] o_rx_im
 );
 
-    magrx u_dut
+    zerochan_tx u_tx_dut
+    ( .clk(clk)
+
+    , .i_valid(i_tx_valid)
+    , .o_ready(o_tx_ready)
+    , .o_idx()
+
+    , .i_re(i_tx_re)
+    , .i_im(i_tx_im)
+
+    , .o_re(o_loop_re)
+    , .o_im(o_loop_im)
+    );
+
+    zerochan_rx u_rx_dut
     ( .clk(clk)
     , .arst(arst)
 
-    , .i_re(i_re)
-    , .i_im(i_im)
+    , .i_re(i_loop_re)
+    , .i_im(i_loop_im)
 
-    , .o_valid(o_valid)
-    , .o_idx(o_idx)
-    , .o_re(o_re)
-    , .o_im(o_im)
+    , .o_valid(o_rx_valid)
+    , .o_idx(o_rx_idx)
+    , .o_re(o_rx_re)
+    , .o_im(o_rx_im)
     );
 
     initial begin

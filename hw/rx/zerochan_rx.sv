@@ -1,4 +1,4 @@
-module magrx
+module zerochan_rx
 ( input  logic               clk
 , input  logic               arst
 
@@ -20,11 +20,13 @@ module magrx
     logic signed [15:0] comm_re, comm_im;
     logic signed [15:0] eq_re, eq_im;
 
+    logic eq_valid;
+
     logic ce;
 
     always_ff @(posedge clk) begin
         if (ce) begin
-            o_valid <= 1'b1;
+            o_valid <= eq_valid;
             o_idx <= eq_idx;
             o_re <= eq_re;
             o_im <= eq_im;
@@ -35,10 +37,10 @@ module magrx
 
     magrx_rst u_rst (clk, arst, rst);
 
-    magrx_sync #
+    zerochan_rx_sync #
     ( .DW(12)
     , .N(1024)
-    , .CP(64)
+    , .CP(61)
     ) u_sync
     ( .clk(clk)
     , .rst(rst)
@@ -51,7 +53,9 @@ module magrx
     , .o_im(sync_im)
     );
 
-    magrx_fft u_fft
+    zerochan_lib_fft_driver #
+    ( .INPUT_WIDTH(12)
+    ) u_fft
     ( .clk(clk)
 
     , .i_idx(sync_idx)
@@ -64,7 +68,7 @@ module magrx
     , .o_im(fft_im)
     );
 
-    magrx_commutator #(1024, 22) u_commutator
+    zerochan_rx_commutator #(1024, 22, 16) u_commutator
     ( .clk(clk)
 
     , .i_ce(ce)
@@ -78,7 +82,7 @@ module magrx
     , .o_im(comm_im)
     );
 
-    magrx_eq #(10) u_eq
+    zerochan_rx_eq #(1024) u_eq
     ( .clk(clk)
 
     , .i_ce(ce)
@@ -86,9 +90,10 @@ module magrx
     , .i_re(comm_re)
     , .i_im(comm_im)
 
+    , .o_valid(eq_valid)
     , .o_idx(eq_idx)
     , .o_re(eq_re)
     , .o_im(eq_im)
     );
 
-endmodule
+endmodule : zerochan_rx
