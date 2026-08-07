@@ -25,6 +25,8 @@ module zerochan_rx_eq #
     logic [31:0] p [0:3];
     logic [15:0] ls_re, ls_im;
 
+    logic no_p0, no_p3;
+
     zerochan_rx_eq_ls #
     ( .FFT_N(FFT_N)
     , .PILOT_SPACING(PILOT_SPACING)
@@ -44,6 +46,9 @@ module zerochan_rx_eq #
     , .o_pilot(pilot)
     , .o_pilot_rel(pilot_rel)
 
+    , .o_no_p0(no_p0)
+    , .o_no_p3(no_p3)
+
     , .o_p(p)
 
     , .o_re(ls_re)
@@ -51,12 +56,16 @@ module zerochan_rx_eq #
     );
 
     logic signed [15:0] h_re, h_im;
+    wire [32:0] h_dbg = (h_re * h_re) + (h_im * h_im);
 
     zerochan_rx_eq_spline_5 #(16, 4) u_spline_re
     ( .clk(clk)
     , .i_ce(i_ce)
 
     , .i_frac(pilot_rel)
+
+    , .i_no_p0(no_p0)
+    , .i_no_p3(no_p3)
 
     , .i_p0(p[0][31:16])
     , .i_p1(p[1][31:16])
@@ -71,6 +80,9 @@ module zerochan_rx_eq #
     , .i_ce(i_ce)
 
     , .i_frac(pilot_rel)
+
+    , .i_no_p0(no_p0)
+    , .i_no_p3(no_p3)
 
     , .i_p0(p[0][15:0])
     , .i_p1(p[1][15:0])
@@ -268,30 +280,40 @@ module zerochan_rx_eq_ls #
 , output logic                    o_pilot
 , output logic [OFFSET_WIDTH-1:0] o_pilot_rel
 
-, output logic [            31:0] o_p [0:3]
+, output logic                    o_no_p0
+, output logic                    o_no_p3
+
+, output logic [            31:0] o_p [4]
 
 , output logic [            15:0] o_re
 , output logic [            15:0] o_im
 );
 
+    logic [32+INDEX_WIDTH-1:0] delay [PILOT_SPACING*2];
+
+    logic signed [15:0] re_d, im_d;
+    logic signed [15:0] re_d_1, im_d_1;
+    logic [INDEX_WIDTH-1:0] idx_d, idx_d_1;
+
     logic is_active, is_pilot;
     logic [PILOTS_WIDTH-1:0] pilot_idx;
-    logic [OFFSET_WIDTH-1:0] pilot_rel;
-
-    wire [INDEX_WIDTH-1:0] rel_idx = i_idx - INDEX_WIDTH'(PILOT_OFFSET);
 
     logic [15:0] re_1, im_1;
     logic [INDEX_WIDTH-1:0] idx_1;
 
+    assign {re_d, im_d, idx_d} = delay[0];
+
     always_ff @(posedge clk) begin
         if (i_ce) begin
+            delay <= {delay[1:PILOT_SPACING*2-1], {i_re, i_im, i_idx}};
+
             is_active <= i_idx != 0 && (i_idx <= INDEX_WIDTH'(DATA_P) || i_idx >= INDEX_WIDTH'(DATA_N));
             is_pilot <= i_idx[OFFSET_WIDTH-1:0] == OFFSET_WIDTH'(PILOT_OFFSET);
-            pilot_rel <= rel_idx[OFFSET_WIDTH-1:0];
             pilot_idx <= i_idx[INDEX_WIDTH-1-:PILOTS_WIDTH];
 
+            idx_d_1 <= idx_d;
+            {re_d_1, im_d_1} <= {re_d, im_d};
             {re_1, im_1} <= {i_re, i_im};
-            idx_1 <= i_idx;
         end
     end
 
@@ -301,7 +323,6 @@ module zerochan_rx_eq_ls #
 
     logic signed [15:0] ls_re, ls_im;
 
-    // LS estimate
     always_comb begin
         unique case (pilot_rom[pilot_idx])
             2'b00: begin
@@ -327,21 +348,26 @@ module zerochan_rx_eq_ls #
         endcase
     end
 
-    logic [PILOT_SPACING*2-1:0] active_d;
-    logic [PILOT_SPACING*2-1:0] pilot_d;
-    logic [INDEX_WIDTH-1:0] idx_2;
-    logic [31:0] p [0:3];
-    logic [31:0] w0, w1;
-    logic [31:0] data [PILOT_SPACING * 2];
-    logic [15:0] d_re, d_im;
-    logic [1:0] sel;
+    localparam logic [PILOTS_WIDTH-1:0] NO_P3_PILOT = ((DATA_P - PILOT_OFFSET) / PILOT_SPACING) + 1;
+    localparam logic [PILOTS_WIDTH-1:0] NO_P0_PILOT = ((DATA_N - PILOT_OFFSET) / PILOT_SPACING) + 2;
+
+    localparam logic [INDEX_WIDTH-1:0] WRAP_AROUND = (FFT_N - PILOT_SPACING * 2) + PILOT_OFFSET;
+
+    logic [31:0] p [4];
+    logic [31:0] w [4];
+    logic sel;
+
+    wire [INDEX_WIDTH-1:0] rel_idx = idx_d_1 - INDEX_WIDTH'(PILOT_OFFSET);
 
     always_comb begin
-        unique case (sel)
-            2'b01:   o_p = {p[0], p[1], p[2], w0};
-            2'b10:   o_p = {p[0], p[1], w0, w1};
-            default: o_p = p;
-        endcase
+        if (o_idx >= WRAP_AROUND) begin
+            unique case (sel)
+                1'b0: o_p = {p[0], p[1], p[2], w[2]};
+                1'b1: o_p = {p[0], p[1], w[2], w[3]};
+            endcase
+        end else begin
+            o_p = p;
+        end
     end
 
     always_ff @(posedge clk) begin
@@ -351,30 +377,37 @@ module zerochan_rx_eq_ls #
                     p <= {p[1:3], {ls_re, ls_im}};
 
                     if (pilot_idx == PILOTS_WIDTH'(0)) begin
-                        sel <= 2'b01;
-                        w0 <= {ls_re, ls_im};
+                        sel <= 1'b0;
+                        w[0] <= {ls_re, ls_im};
+                        w[2] <= w[0];
                     end else if (pilot_idx == PILOTS_WIDTH'(1)) begin
-                        sel <= 2'b10;
-                        w1 <= {ls_re, ls_im};
+                        sel <= 1'b1;
+                        w[1] <= {ls_re, ls_im};
+                        w[3] <= w[1];
                     end else begin
-                        sel <= 2'b00;
+                        sel <= 1'b0;
                     end
                 end else begin
                     p <= {p[1:3], p[3]};
                 end
+
+                if (pilot_idx == NO_P3_PILOT) begin
+                    o_no_p0 <= 1'b0;
+                    o_no_p3 <= 1'b1;
+                end else if (pilot_idx == NO_P0_PILOT) begin
+                    o_no_p0 <= 1'b1;
+                    o_no_p3 <= 1'b0;
+                end else begin
+                    o_no_p0 <= 1'b0;
+                    o_no_p3 <= 1'b0;
+                end
             end
 
-            data <= {data[1:PILOT_SPACING*2-1], {re_1, im_1}};
-            {o_re, o_im} <= data[0];
-
-            o_pilot_rel <= pilot_rel;
-            o_idx <= idx_1 - INDEX_WIDTH'(PILOT_SPACING*2);
-
-            active_d <= {is_active, active_d[PILOT_SPACING*2-1:1]};
-            o_active <= active_d[0];
-
-            pilot_d <= {is_pilot, pilot_d[PILOT_SPACING*2-1:1]};
-            o_pilot <= pilot_d[0];
+            {o_re, o_im} <= {re_d_1, im_d_1};
+            o_idx <= idx_d_1;
+            o_active <= idx_d_1 != 0 && (idx_d_1 <= INDEX_WIDTH'(DATA_P) || idx_d_1 >= INDEX_WIDTH'(DATA_N));
+            o_pilot <= idx_d_1[OFFSET_WIDTH-1:0] == OFFSET_WIDTH'(PILOT_OFFSET);
+            o_pilot_rel <= rel_idx[OFFSET_WIDTH-1:0];
         end
     end
 
@@ -437,6 +470,8 @@ module zerochan_rx_eq_spline_5 #
 , input  logic                         i_ce
 
 , input  logic        [FRAC_WIDTH-1:0] i_frac
+, input  logic                         i_no_p0
+, input  logic                         i_no_p3
 
 , input  logic signed [DATA_WIDTH-1:0] i_p0
 , input  logic signed [DATA_WIDTH-1:0] i_p1
@@ -447,14 +482,29 @@ module zerochan_rx_eq_spline_5 #
 );
 
     logic signed [DATA_WIDTH+2:0] c0, c1, c2, c3;
+    logic signed [DATA_WIDTH+1:0] m0, m1;
     logic [FRAC_WIDTH-1:0] frac_1;
+
+    always_comb begin
+        if (i_no_p0) begin
+            m0 = i_p2 - i_p1;
+        end else begin
+            m0 = (i_p2 >>> 1) - (i_p0 >>> 1);
+        end
+
+        if (i_no_p3) begin
+            m1 = i_p2 - i_p1;
+        end else begin
+            m1 = (i_p3 >>> 1) - (i_p1 >>> 1);
+        end
+    end
 
     always_ff @(posedge clk) begin
         if (i_ce) begin
             c0 <= i_p1;
-            c1 <= (i_p2 >>> 1) - (i_p0 >>> 1);
-            c2 <= i_p0 - (i_p1 << 1) - (i_p1 >>> 1) + (i_p2 << 1) - (i_p3 >>> 1);
-            c3 <= (i_p1 >>> 1) + i_p1 - (i_p2 >>> 1) - i_p2 + (i_p3 >>> 1) - (i_p0 >>> 1);
+            c1 <= m0;
+            c2 <= (i_p2 + (i_p2 << 1)) - (i_p1 + (i_p1 << 1)) - (m0 << 1) - m1;
+            c3 <= (i_p1 << 1) - (i_p2 << 1) + m0 + m1;
 
             frac_1 <= i_frac;
         end
@@ -497,54 +547,6 @@ module zerochan_rx_eq_spline_5 #
         u_clamp (clk, i_ce, s3, o_val);
 
 endmodule : zerochan_rx_eq_spline_5
-
-module zerochan_rx_eq_lerp_5 #
-( parameter int DW = 16
-, parameter int FI = 5
-)
-( input  logic                 clk
-
-, input  logic                 i_ce
-
-, input  logic        [FI-1:0] i_frac
-, input  logic signed [DW-1:0] i_p0
-, input  logic signed [DW-1:0] i_p1
-, input  logic signed [DW-1:0] i_p2
-, input  logic signed [DW-1:0] i_p3
-
-, output logic signed [DW-1:0] o_val
-);
-
-    // 1: Compute
-
-    localparam logic [FI-2:0] ROUND = 1 << (FI - 1);
-
-    logic signed [DW+FI:0] delta_1;
-    logic signed [DW-1:0] y0_1;
-
-    wire signed [DW+FI:0] delta_0 = (i_p2 - i_p1) * $signed({1'b0, i_frac});
-
-    always_ff @(posedge clk) begin
-        if (i_ce) begin
-            delta_1 <= delta_0[DW+FI] ? delta_0 - ROUND : delta_0 + ROUND;
-            y0_1 <= i_p1;
-        end
-    end
-
-    // 2: Round
-
-    logic signed [DW-1:0] val, val_1, val_2;
-
-    always_ff @(posedge clk) begin
-        if (i_ce) begin
-            val <= DW'(y0_1 + (delta_1 >>> FI));
-            val_1 <= val;
-            val_2 <= val_1;
-            o_val <= val_2;
-        end
-    end
-
-endmodule : zerochan_rx_eq_lerp_5
 
 module zerochan_rx_eq_reciprocal_3 #
 // Denominator for addressing and interpolation

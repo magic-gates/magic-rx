@@ -296,7 +296,7 @@ module zerochan_rx_sync #
     //     dev_valid <= boundary;
     // end
 
-    localparam logic [ID-1:0] REF = (N - 1);
+    localparam logic [ID-1:0] REF = (N - 1) + 2;
     localparam logic [ID-1:0] WRAP = (LEN / 2) - CP;
 
     logic err_late;

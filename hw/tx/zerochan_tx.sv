@@ -136,7 +136,8 @@ module zerochan_tx_source #
     localparam int PILOTS_WIDTH = $clog2(PILOTS);
     localparam int PILOT_OFFSET_WIDTH = $clog2(PILOT_OFFSET) + 1;
 
-    localparam logic signed [PILOT_WIDTH-1:0] PILOT = (2 ** (PILOT_WIDTH - 1)) - 1;
+    localparam logic [PILOT_WIDTH-1:0] PILOT_P = {1'b0, {(PILOT_WIDTH-1){1'b1}}};
+    localparam logic [PILOT_WIDTH-1:0] PILOT_N = {1'b1, {(PILOT_WIDTH-2){1'b0}}, 1'b1};
 
     logic [COUNTER_WIDTH-1:0] counter;
     wire [INDEX_WIDTH-1:0] idx = counter[INDEX_WIDTH-1:0];
@@ -174,10 +175,10 @@ module zerochan_tx_source #
             o_idx <= idx_1;
 
             unique case (pilot_rom[pilot_idx])
-                2'b00: {o_p_re, o_p_im} <= {PILOT, PILOT_WIDTH'(0)};
-                2'b01: {o_p_re, o_p_im} <= {PILOT_WIDTH'(0), PILOT};
-                2'b10: {o_p_re, o_p_im} <= {-PILOT, PILOT_WIDTH'(0)};
-                2'b11: {o_p_re, o_p_im} <= {PILOT_WIDTH'(0), -PILOT};
+                2'b00: {o_p_re, o_p_im} <= {PILOT_P, PILOT_WIDTH'(0)};
+                2'b01: {o_p_re, o_p_im} <= {PILOT_WIDTH'(0), PILOT_P};
+                2'b10: {o_p_re, o_p_im} <= {PILOT_N, PILOT_WIDTH'(0)};
+                2'b11: {o_p_re, o_p_im} <= {PILOT_WIDTH'(0), PILOT_N};
             endcase
         end else begin
             o_valid <= 1'b0;
@@ -220,21 +221,18 @@ module zerochan_tx_gearbox #
         end
     end
 
-    logic [INPUT_WIDTH-2:0] agc_max, agc_max_1, agc_gain;
+    logic [INPUT_WIDTH-2:0] agc_max, agc_gain;
     logic [INPUT_WIDTH-1:0] re_2, im_2;
     logic [INDEX_WIDTH-1:0] idx_2;
 
     always_ff @(posedge clk) begin
         if (i_ce) begin
-            if (agc_value > agc_max) begin
-                agc_max <= agc_value;
-            end
-
             if (idx_1 == 0) begin
                 agc_max <= agc_value;
+            end else if (agc_value > agc_max) begin
+                agc_max <= agc_value;
             end
 
-            agc_max_1 <= agc_max;
             {re_2, im_2} <= {re_1, im_1};
             idx_2 <= idx_1;
         end
@@ -246,11 +244,11 @@ module zerochan_tx_gearbox #
     logic [INDEX_WIDTH-1:0] fwd_idx, rev_idx;
     logic [GAIN_WIDTH-1:0] agc_lzc, gain;
 
-    zerochan_lib_lzc_0 #(INPUT_WIDTH-1) u_lzc (agc_max_1, agc_lzc);
+    zerochan_lib_lzc_0 #(INPUT_WIDTH-1) u_lzc (agc_max, agc_lzc);
 
     always_ff @(posedge clk) begin
         if (i_ce) begin
-            if (idx_2 == 0) begin
+            if (idx_2 == INDEX_WIDTH'(FFT_N - 1)) begin
                 gain <= agc_lzc;
             end
 
@@ -273,6 +271,8 @@ module zerochan_tx_gearbox #
 
     logic [INDEX_WIDTH-1:0] ptr;
 
+    logic [GAIN_WIDTH-1:0] gain_1;
+
     always_ff @(posedge clk) begin
         ptr <= ptr + INDEX_WIDTH'(1);
 
@@ -287,22 +287,24 @@ module zerochan_tx_gearbox #
             end else begin
                 a_ram[rev_idx] <= {re_3, im_3};
             end
+
+            gain_1 <= gain;
         end
     end
 
-    logic [GAIN_WIDTH-1:0] z_gain;
+    logic [GAIN_WIDTH-1:0] gain_2;
     logic [INPUT_WIDTH-1:0] z_re, z_im;
 
     always_ff @(posedge clk) begin
         {z_re, z_im} <= flip ? a_ram[ptr] : b_ram[ptr];
-        z_gain <= gain;
+        gain_2 <= gain_1;
     end
 
     logic [INPUT_WIDTH-1:0] amp_re, amp_im;
 
     always_ff @(posedge clk) begin
-        amp_re <= z_re << z_gain;
-        amp_im <= z_im << z_gain;
+        amp_re <= z_re << gain_2;
+        amp_im <= z_im << gain_2;
     end
 
     zerochan_lib_round_1 #(INPUT_WIDTH, INPUT_WIDTH-OUTPUT_WIDTH) u_round_re

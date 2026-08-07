@@ -19,16 +19,12 @@ module zerochan_lib_mult_4 #
 , output logic signed [OUTPUT_WIDTH-1:0] o_im
 );
 
-    // localparam logic signed [B_WIDTH-1:0] POS_SAT = {1'b0, {(B_WIDTH-1){1'b1}}};
-
     logic signed [A_WIDTH:0] s1;
     logic signed [B_WIDTH:0] s2;
     logic signed [A_WIDTH:0] s3;
 
     logic signed [B_WIDTH-1:0] b_re_1, b_im_1;
     logic signed [A_WIDTH-1:0] a_im_1;
-
-    // wire b_overflow = b_im[B_WIDTH-1] & (~b_im[B_WIDTH-2:0]);
 
     always_ff @(posedge clk) begin
         if (ce) begin

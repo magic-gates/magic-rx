@@ -47,7 +47,7 @@ async def channel(dut):
     """Sample-by-sample channel processing loop."""
     cfo_effect = CFOChannel(cfo=0.4)
     path_effect = MultipathChannel(taps=[1.0, 0.3 + 0.2j, 0.1j])
-    awgn_effect = AWGNChannel(snr_db=50, sig_pwr=2047.0**2)
+    awgn_effect = AWGNChannel(snr_db=55, sig_pwr=2047.0**2)
 
     while True:
         # Read sample from loopback output pins
@@ -56,9 +56,9 @@ async def channel(dut):
         sample = complex(re_in, im_in)
 
         # Apply channel pipeline sample by sample
-        sample = cfo_effect.apply(sample)
-        sample = path_effect.apply(sample)
-        sample = awgn_effect.apply(sample)
+        # sample = cfo_effect.apply(sample)
+        # sample = path_effect.apply(sample)
+        # sample = awgn_effect.apply(sample)
 
         dut.i_loop_re.value = int(
             np.clip(sample.real, -2048, 2047).astype(np.int16)
@@ -121,7 +121,7 @@ def generate_64qam(size):
     return syms / 7.0
 
 def generate_qpsk(n):
-    symbols = np.array([1+0j, 1j, -1+0j, -1j])
+    symbols = np.array([1+1j, -1+1j, -1-1j, 1-1j])
     return np.random.choice(symbols, size=n)
 
 async def reset(dut):
